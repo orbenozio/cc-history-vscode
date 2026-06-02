@@ -2,3 +2,7 @@ node_modules/
 out/
 *.vsix
 .vscode-test/
+
+# CI workflow is held out of git until the gh token gains the `workflow` scope
+# (run: gh auth refresh -h github.com -s workflow). Then: git add -f .github/ && push.
+.github/
