@@ -3,6 +3,9 @@
 import * as assert from "assert";
 import { decodeNaive } from "../../core/decode";
 import { buildFtsQuery, parseDurationOrDate } from "../../core/query";
+import { BetterSqlite3Engine } from "../../core/sqliteEngine";
+import { SCHEMA } from "../../core/schema";
+import { tryAcquire, renew, release, LOCK_STALE_MS } from "../../core/lock";
 
 export function testDecode(): void {
   if (process.platform === "win32") {
@@ -42,4 +45,26 @@ export function testQuery(): void {
     "2026-01-15T10:00:00Z"
   );
   console.log("[unit] query PASS");
+}
+
+export function testLock(): void {
+  const db = new BetterSqlite3Engine().openReadWrite(":memory:");
+  try {
+    db.exec(SCHEMA);
+    const t0 = 1_000_000;
+    // First owner acquires; a different owner is then refused.
+    assert.strictEqual(tryAcquire(db, "winA", t0), true);
+    assert.strictEqual(tryAcquire(db, "winB", t0 + 1000), false);
+    // Owner can renew; a non-owner renew fails.
+    assert.strictEqual(renew(db, "winA", t0 + 2000), true);
+    assert.strictEqual(renew(db, "winB", t0 + 2000), false);
+    // A stale lock (heartbeat older than TTL) is reclaimable by anyone.
+    assert.strictEqual(tryAcquire(db, "winB", t0 + 2000 + LOCK_STALE_MS + 1), true);
+    // Release frees it for the next owner.
+    release(db, "winB");
+    assert.strictEqual(tryAcquire(db, "winA", t0 + 999_999_999), true);
+    console.log("[unit] lock PASS");
+  } finally {
+    db.close();
+  }
 }

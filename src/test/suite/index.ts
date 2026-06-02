@@ -6,14 +6,18 @@ import * as path from "path";
 import * as assert from "assert";
 import { runProbeInWorker } from "../../extension";
 import { testConformance } from "./conformance.test";
-import { testDecode, testQuery } from "./unit.test";
+import { testDecode, testQuery, testLock } from "./unit.test";
+import { testIndexerIntegration } from "./indexer.test";
 
 export async function run(): Promise<void> {
   // 1. Parser/truncation byte-exact parity with the CLI.
   testConformance();
-  // 2. decode + query helpers.
+  // 2. decode + query + cross-process lock helpers.
   testDecode();
   testQuery();
+  testLock();
+  // 3. Incremental indexer over the real ~/.claude (skips on CI).
+  testIndexerIntegration();
 
   // 3. Phase 0 regression: native better-sqlite3 FTS5 + Hebrew MATCH in a worker.
   const workerPath = path.resolve(__dirname, "../../ftsWorker.js");
