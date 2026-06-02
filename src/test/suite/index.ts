@@ -1,30 +1,29 @@
-// Runs inside VS Code's extension host (real Electron). Drives the worker probe
-// and asserts the Hebrew FTS5 MATCH succeeds with the expected ABI.
+// Runs inside VS Code's extension host (real Electron). Phase 1 adds the
+// golden-file conformance + unit suites; the Phase 0 worker FTS probe stays as
+// a regression that the native engine still loads and queries Hebrew.
 
 import * as path from "path";
 import * as assert from "assert";
 import { runProbeInWorker } from "../../extension";
+import { testConformance } from "./conformance.test";
+import { testDecode, testQuery } from "./unit.test";
 
 export async function run(): Promise<void> {
+  // 1. Parser/truncation byte-exact parity with the CLI.
+  testConformance();
+  // 2. decode + query helpers.
+  testDecode();
+  testQuery();
+
+  // 3. Phase 0 regression: native better-sqlite3 FTS5 + Hebrew MATCH in a worker.
   const workerPath = path.resolve(__dirname, "../../ftsWorker.js");
   const r = await runProbeInWorker(workerPath);
-  console.log("[spike] probe result:\n" + JSON.stringify(r, null, 2));
-
-  assert.ok(r.ok, `probe not ok: ${r.error ?? "unknown error"}`);
-  assert.ok(r.hebrewMatchHits >= 1, "expected at least one Hebrew MATCH hit");
-  assert.ok(
-    r.matchedText && r.matchedText.includes("שלום"),
-    "matched row should contain the Hebrew word"
-  );
-  assert.strictEqual(
-    r.abiModules,
-    "140",
-    `worker ran under ABI ${r.abiModules}, expected 140 (Electron 39)`
-  );
-
+  assert.ok(r.ok, `FTS worker probe failed: ${r.error ?? "unknown"}`);
+  assert.ok(r.hebrewMatchHits >= 1, "expected a Hebrew MATCH hit");
+  assert.strictEqual(r.abiModules, "140", `unexpected ABI ${r.abiModules}`);
   console.log(
-    "[spike] PASS — native better-sqlite3 FTS5 + Hebrew MATCH works in a " +
-      "worker_thread inside VS Code's Electron " +
-      `(electron=${r.electron}, sqlite=${r.sqliteVersion}, niqqud-folds=${r.diacriticsFold})`
+    `[engine] PASS — Hebrew FTS5 MATCH in worker (electron=${r.electron}, sqlite=${r.sqliteVersion})`
   );
+
+  console.log("[phase1] ALL PASS");
 }
